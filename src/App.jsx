@@ -436,6 +436,19 @@ export default function App() {
                 </div>
               </div>
             </FormSection>
+            <FormSection number="4" title="Datos de contacto" icon={<Phone className="w-5 h-5" />}>
+              <div className="md:col-span-2">
+                  <InputField
+                      label="Teléfono o WhatsApp de Contacto"
+                      name="telefonoContacto"
+                      type="tel"
+                      value={formData.telefonoContacto}
+                      onChange={handleChange}
+                      required
+                      placeholder="Ej: 2804123456"
+                      hint="Te contactaré a este número para coordinar la venta o resolver tus dudas"/>
+              </div>
+            </FormSection>
 
             <button
               type="submit"
