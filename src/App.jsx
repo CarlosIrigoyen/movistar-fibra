@@ -6,10 +6,15 @@ import {
 } from 'lucide-react';
 
 /* ============================================================
-   CONFIGURACIÓN FORMSPREE
-   Un solo email con formato limpio y secciones
+   CONFIGURACIÓN FORMSPREE (email)
    ============================================================ */
 const FORMSPREE_ENDPOINT = 'https://formspree.io/f/xoejvqjl';
+
+/* ============================================================
+   CONFIGURACIÓN CALLMEBOT (WhatsApp del asesor)
+   ============================================================ */
+const CALLMEBOT_PHONE = '+5492804300415';
+const CALLMEBOT_API_KEY = '5051047';
 
 /* ---------------- DATA ---------------- */
 const PLANES_CLIENTES = [
@@ -75,15 +80,18 @@ export default function App() {
     calle: '', numero: '', transversal1: '', transversal2: '',
     calleAtras: '', localidad: '',
     nombre: '', dni: '', fechaNacimiento: '',
-    numeroTarjeta: '', bancoEmisor: ''
+    numeroTarjeta: '', bancoEmisor: '',
+    telefonoContacto: ''
   };
 
   const [formData, setFormData] = useState(initialFormState);
+  const [pagaConTarjeta, setPagaConTarjeta] = useState(false);
   const [status, setStatus] = useState('idle');
   const [geoStatus, setGeoStatus] = useState('idle');
   const [coords, setCoords] = useState(null);
   const formRef = useRef(null);
 
+  /* -------- Dirección + link de Maps -------- */
   const direccionTexto = useMemo(() => {
     const { calle, numero, localidad } = formData;
     if (!calle.trim() || !numero.trim() || !localidad.trim()) return '';
@@ -95,6 +103,7 @@ export default function App() {
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccionTexto)}`;
   }, [direccionTexto]);
 
+  /* -------- Fetch coordenadas GPS (background) -------- */
   useEffect(() => {
     if (!direccionTexto) {
       setCoords(null);
@@ -127,11 +136,13 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [direccionTexto]);
 
+  /* -------- Handlers -------- */
   const handleChange = (e) => {
     const { name, value } = e.target;
     let v = value;
     if (name === 'numeroTarjeta') v = value.replace(/\D/g, '').slice(0, 16);
     if (name === 'dni') v = value.replace(/\D/g, '').slice(0, 8);
+    if (name === 'telefonoContacto') v = value.replace(/[^\d+\s()-]/g, '').slice(0, 20);
     setFormData((p) => ({ ...p, [name]: v }));
   };
 
@@ -140,6 +151,17 @@ export default function App() {
     setStatus('submitting');
 
     const coordsTexto = coords ? `${coords.lat}, ${coords.lng}` : 'No disponibles';
+
+    /* -------- Sección 3: contenido condicional -------- */
+    const seccion3 = ['💳 VALIDAR TARJETA'];
+    if (pagaConTarjeta && formData.numeroTarjeta && formData.bancoEmisor) {
+      seccion3.push(`NUMERO TARJETA: ${formData.numeroTarjeta}`);
+      seccion3.push(`BANCO: ${formData.bancoEmisor}`);
+    } else if (pagaConTarjeta) {
+      seccion3.push('INDICÓ PAGO CON TARJETA (datos incompletos)');
+    } else {
+      seccion3.push('NO POSEE TARJETA / OTRO MEDIO DE PAGO');
+    }
 
     /* -------- Cuerpo del email formateado -------- */
     const mensaje = [
@@ -161,9 +183,11 @@ export default function App() {
       '',
       'SECCION 3',
       '',
-      '💳 VALIDAR TARJETA',
-      `NUMERO TARJETA: ${formData.numeroTarjeta}`,
-      `BANCO: ${formData.bancoEmisor}`
+      ...seccion3,
+      '',
+      'CONTACTO',
+      '',
+      `TELEFONO DE CONTACTO: ${formData.telefonoContacto || 'No especificado'}`
     ].join('\n');
 
     const data = new FormData();
@@ -176,9 +200,43 @@ export default function App() {
         body: data,
         headers: { Accept: 'application/json' }
       });
+
       if (res.ok) {
+        /* -------- Notificación por WhatsApp (CallMeBot) -------- */
+        const waText = [
+          '🔔 *NUEVA SOLICITUD MOVISTAR*',
+          '',
+          '*SECCION 1*',
+          `CALLE: ${formData.calle}`,
+          `NUMERO: ${formData.numero}`,
+          `TRANSVERSAL 1: ${formData.transversal1}`,
+          `TRANSVERSAL 2: ${formData.transversal2}`,
+          `CALLE DE ATRAS: ${formData.calleAtras || 'No especificada'}`,
+          `LOCALIDAD: ${formData.localidad}`,
+          `COORDENADAS: ${coordsTexto}`,
+          '',
+          '*SECCION 2*',
+          `NOMBRE: ${formData.nombre}`,
+          `DNI: ${formData.dni}`,
+          `FECHA NAC: ${formData.fechaNacimiento}`,
+          '',
+          '*SECCION 3*',
+          ...seccion3,
+          '',
+          '*CONTACTO*',
+          `TELEFONO: ${formData.telefonoContacto || 'No especificado'}`
+        ].join('\n');
+
+        const waUrl = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(CALLMEBOT_PHONE)}&text=${encodeURIComponent(waText)}&apikey=${CALLMEBOT_API_KEY}`;
+
+        // Fire and forget: no bloquea la experiencia del usuario
+        fetch(waUrl, { mode: 'no-cors' }).catch(() => {
+          console.warn('CallMeBot: no se pudo enviar el WhatsApp (pero el email se envió OK).');
+        });
+
         setStatus('success');
         setFormData(initialFormState);
+        setPagaConTarjeta(false);
         setCoords(null);
         setGeoStatus('idle');
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -190,6 +248,9 @@ export default function App() {
     }
   };
 
+  /* ============================================================
+     RENDER
+     ============================================================ */
   return (
     <div className="min-h-screen bg-white text-[#0B1A28] font-sans antialiased">
 
@@ -318,7 +379,7 @@ export default function App() {
               <span className="w-1.5 h-6 bg-[#019DF4] rounded-full" /> Packs de Canales Premium
             </h3>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {PACKS_PREMIUM.map((p) => (<AddonCard key={p.nombre} nombre={p.nombre} precio={p.precio} compact />))}
+              {PACKS_PREMIUM.map((p) => (<AddonCard key={p.nombre} nombre={p.nombre} precio={p.precio} />))}
             </div>
           </div>
 
@@ -360,13 +421,16 @@ export default function App() {
               <XCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
               <div>
                 <p className="font-semibold text-red-800">Hubo un problema al enviar</p>
-                <p className="text-sm text-red-700">Por favor, intentá nuevamente o escribime directo al WhatsApp <strong>2804300415</strong>.</p>
+                <p className="text-sm text-red-700">
+                  Por favor, intentá nuevamente o escribime directo al WhatsApp <strong>2804300415</strong>.
+                </p>
               </div>
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="bg-white rounded-3xl shadow-xl border border-gray-100 p-5 md:p-8 space-y-8">
 
+            {/* ---------- SECCIÓN 1 (obligatoria) ---------- */}
             <FormSection number="1" title="Validar direcciones / disponibilidad" icon={<MapPinned className="w-5 h-5" />}>
               <InputField label="Calle" name="calle" value={formData.calle} onChange={handleChange} required placeholder="Ej: Av. San Martín" />
               <InputField label="Número" name="numero" value={formData.numero} onChange={handleChange} required placeholder="Ej: 1234" />
@@ -406,7 +470,8 @@ export default function App() {
               </div>
             </FormSection>
 
-            <FormSection number="2" title="Validar titular (Scoring)" icon={<User className="w-5 h-5" />}>
+            {/* ---------- SECCIÓN 2 (obligatoria) ---------- */}
+            <FormSection number="2" title="Validar titular" icon={<User className="w-5 h-5" />}>
               <InputField label="Nombre y Apellido" name="nombre" value={formData.nombre} onChange={handleChange} required placeholder="Ej: Juan Pérez" />
               <InputField label="DNI" name="dni" value={formData.dni} onChange={handleChange} required placeholder="Ej: 30123456" maxLength={8} />
               <div className="md:col-span-2">
@@ -414,18 +479,44 @@ export default function App() {
               </div>
             </FormSection>
 
-            <FormSection number="3" title="Validar tarjeta" icon={<CreditCard className="w-5 h-5" />}>
-              <InputField
-                label="Número de Tarjeta"
-                name="numeroTarjeta"
-                value={formData.numeroTarjeta}
-                onChange={handleChange}
-                required
-                maxLength={16}
-                placeholder="16 dígitos"
-                hint={`${formData.numeroTarjeta.length}/16 dígitos`}
-              />
-              <InputField label="Banco Emisor" name="bancoEmisor" value={formData.bancoEmisor} onChange={handleChange} required placeholder="Ej: Banco Nación" />
+            {/* ---------- SECCIÓN 3 (opcional SIEMPRE) ---------- */}
+            <FormSection number="3" title="Validar tarjeta (opcional)" icon={<CreditCard className="w-5 h-5" />}>
+              <div className="md:col-span-2">
+                <label className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-xl p-4 cursor-pointer hover:bg-gray-100 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={pagaConTarjeta}
+                    onChange={(e) => {
+                      setPagaConTarjeta(e.target.checked);
+                      if (!e.target.checked) {
+                        setFormData((p) => ({ ...p, numeroTarjeta: '', bancoEmisor: '' }));
+                      }
+                    }}
+                    className="mt-0.5 w-5 h-5 accent-[#019DF4] cursor-pointer flex-shrink-0"
+                  />
+                  <div>
+                    <p className="font-semibold text-[#0B1A28] text-sm">¿Querés pagar con tarjeta?</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Es <strong>opcional</strong>. Marcá esta casilla si vas a abonar con tarjeta (banco, billetera virtual, etc.). Si no, dejalo sin marcar.
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              {pagaConTarjeta && (
+                <>
+                  <InputField
+                    label="Número de Tarjeta"
+                    name="numeroTarjeta"
+                    value={formData.numeroTarjeta}
+                    onChange={handleChange}
+                    maxLength={16}
+                    placeholder="16 dígitos (opcional)"
+                    hint={`${formData.numeroTarjeta.length}/16 dígitos — podés completarlo después`}
+                  />
+                  <InputField label="Banco Emisor" name="bancoEmisor" value={formData.bancoEmisor} onChange={handleChange} placeholder="Ej: Banco Nación, Mercado Pago, Ualá" />
+                </>
+              )}
 
               <div className="md:col-span-2">
                 <div className="flex items-start gap-3 bg-yellow-50 border border-yellow-200 rounded-xl p-4">
@@ -436,17 +527,18 @@ export default function App() {
                 </div>
               </div>
             </FormSection>
-            <FormSection number="4" title="Datos de contacto" icon={<Phone className="w-5 h-5" />}>
+
+            {/* ---------- CONTACTO (opcional) ---------- */}
+            <FormSection number="4" title="Teléfono de contacto (opcional)" icon={<Phone className="w-5 h-5" />}>
               <div className="md:col-span-2">
-                  <InputField
-                      label="Teléfono o WhatsApp de Contacto"
-                      name="telefonoContacto"
-                      type="tel"
-                      value={formData.telefonoContacto}
-                      onChange={handleChange}
-                      required
-                      placeholder="Ej: 2804123456"
-                      hint="Te contactaré a este número para coordinar la venta o resolver tus dudas"/>
+                <InputField
+                  label="Teléfono / Celular"
+                  name="telefonoContacto"
+                  value={formData.telefonoContacto}
+                  onChange={handleChange}
+                  placeholder="Ej: 2804123456 o +54 9 280 412-3456"
+                  hint="Dejame tu número si querés que te contacte directo por WhatsApp o llamada."
+                />
               </div>
             </FormSection>
 
@@ -554,7 +646,7 @@ function PlanCard({ plan }) {
   );
 }
 
-function AddonCard({ nombre, precio, compact = false }) {
+function AddonCard({ nombre, precio }) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-4 hover:shadow-md hover:border-[#019DF4]/40 transition-all">
       <p className="font-bold text-[#0B1A28] text-sm">{nombre}</p>
