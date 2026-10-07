@@ -48,6 +48,14 @@ const COMPLEMENTOS = [
   { nombre: 'Decodificador Adicional', precio: '4.752' }
 ];
 
+/* ---------------- FORMATEAR FECHA A DD/MM/AAAA ---------------- */
+const formatearFecha = (fechaISO) => {
+  if (!fechaISO) return '';
+  const [year, month, day] = fechaISO.split('-');
+  if (!year || !month || !day) return fechaISO;
+  return `${day}/${month}/${year}`;
+};
+
 /* ---------------- INPUT REUTILIZABLE ---------------- */
 const InputField = ({ label, name, value, onChange, type = 'text', required = false, placeholder = '', maxLength, readOnly = false, hint }) => (
   <div className="flex flex-col gap-1.5">
@@ -169,6 +177,7 @@ export default function App() {
     setStatus('submitting');
 
     const coordsTexto = coords ? `${coords.lat}, ${coords.lng}` : '';
+    const fechaFormateada = formatearFecha(formData.fechaNacimiento);
 
     /* -------- Sección 3: contenido condicional -------- */
     let seccion3Texto = '';
@@ -192,7 +201,7 @@ export default function App() {
     const seccion5Texto = [
       `-NOMBRE COMPLETO: ${formData.nombre || ''}`,
       `-DNI: ${formData.dni || ''}`,
-      `-FECHA DE NACIMIENTO: ${formData.fechaNacimiento || ''}`,
+      `-FECHA DE NACIMIENTO: ${fechaFormateada}`,
       `-NOMBRE DE LA CALLE: ${formData.calle || ''}`,
       `-NUMERO DEL HOGAR: ${formData.numero || ''}`,
       `-ENTRE CALLES: ${entreCalles}`,
@@ -227,7 +236,7 @@ export default function App() {
       '👤 VALIDAR TITULAR (scoring)',
       `NOMBRE: ${formData.nombre}`,
       `DNI: ${formData.dni}`,
-      `FECHA NAC: ${formData.fechaNacimiento}`,
+      `FECHA NAC: ${fechaFormateada}`,
       '',
       'SECCION 3',
       '💳 VALIDAR TARJETA',
@@ -253,7 +262,7 @@ export default function App() {
     data1.append('message', mensaje1);
     data1.append('NOMBRE COMPLETO', formData.nombre || '');
     data1.append('DNI', formData.dni || '');
-    data1.append('FECHA DE NACIMIENTO', formData.fechaNacimiento || '');
+    data1.append('FECHA DE NACIMIENTO', fechaFormateada);
     data1.append('NOMBRE DE LA CALLE', formData.calle || '');
     data1.append('NUMERO DEL HOGAR', formData.numero || '');
     data1.append('ENTRE CALLES', entreCalles);
@@ -274,7 +283,6 @@ export default function App() {
     data2.append('SECCION_5_RESUMEN', seccion5Texto);
 
     try {
-      // Enviamos los 2 emails en paralelo
       const [res1, res2] = await Promise.all([
         fetch(FORMSPREE_ENDPOINT, {
           method: 'POST',
@@ -288,7 +296,6 @@ export default function App() {
         })
       ]);
 
-      // Consideramos OK si AL MENOS uno de los dos envíos tuvo éxito
       if (res1.ok || res2.ok) {
         /* -------- WhatsApp 1: Secciones 1-4 -------- */
         const waText1 = [
@@ -307,7 +314,7 @@ export default function App() {
           '*SECCION 2*',
           `NOMBRE: ${formData.nombre}`,
           `DNI: ${formData.dni}`,
-          `FECHA NAC: ${formData.fechaNacimiento}`,
+          `FECHA NAC: ${fechaFormateada}`,
           '',
           '*SECCION 3*',
           seccion3Texto,
@@ -324,7 +331,6 @@ export default function App() {
           console.warn('CallMeBot: no se pudo enviar el WhatsApp 1.');
         });
 
-        /* -------- WhatsApp 2: Sección 5 (espera 5s para respetar rate limit) -------- */
         setTimeout(() => {
           const waText2 = [
             '🔔 *RESUMEN SOLICITUD [2/2]*',
